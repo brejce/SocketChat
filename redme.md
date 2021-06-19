@@ -270,20 +270,23 @@ Redis数据库安装参考 [Github](https://github.com/redis/redis) 安装后运
 ### 第一节 数据库的设计与搭建
 
 #### 项目文件结构
-打开 VsCode 新建文件夹 Sverver/ ，文件位置可以任选,本文选择在 /home/username/Program/Server 。
+##### server/
+- functool.go /提供公共方法
+- go.mod /go mod 包管理器文件
+- go.sum /go mod 包管理器文件
+- client.go /为每一个客户端提供监听功能
+- hub.go /每一个客户端都集中存储到hub里面
+- message.go /关于 message 的方法
+- user.go /关于 user 的方法
+- main.go /服务器的入口
 
-Server/
-
-* server.go
-* functool.go
-* go.mod
-* go.sum
+打开 VsCode 新建文件夹 sverver/ ，文件位置可以任选,本文选择在 /home/brejce/Program/server 。
 
 在终端进入 Server/ 执行以下代码。
 ```Bash
 go run mod init server
 ```
-获得如下信息，表示我们以及使用 go Mod 作为包管理器，这样做可以提升效率。
+获得如下信息，表示我们已经成功使用 go mod 作为包管理器，这样我们不必手动去导包，go mod 会自动搞定。
 ```Bash
 go: creating new go.mod: module Server
 go: to add module requirements and sums:
@@ -306,22 +309,25 @@ Redis数据库主要存储User及Message结构体，代码如下：
 ```golang
 //functool.go
 
+
+//Message -> Db 1
+type Message struct {
+    Name   string `json:"name"`
+    IdTime string `json:"idtime"`
+    Msge   string `json:"msge"`
+}
 //User ->Db 0
 type User struct {
     Name   string `json:"name"`
     Passwd string `json:"passwd"`
-    Status bool   `json:"status"`
-}
-//Message -> Db 1
-type Message struct {
-    Name   string `json:"name"`
-    IdTime string `json:"idtime"` //Name+时间戳
-    Msge   string `json:"msge"`
+    Status string `json:"status"`
 }
 
+//已登录用户
+var UserMap = make(map[int]User)
 ```
 
-#### 用户管理
+#### User 管理
 
 ##### 序列化
 
@@ -330,24 +336,27 @@ type Message struct {
         
 
 ```Golang
-//functool.go
+//user.go
 
-func StructTojson(user User) []byte{ 
-//将User结构体序列化操作封装成方法
-    data, err := json.Marshal(user)
-    //使用json.Marshal序列化User，data数据类型为[]byte
-    CheckError(err)                
-    //error处理
+
+//将User转化为[]byte
+func StructTojson(user User) []byte { 
+    //将User结构体序列化操作封装成方法
+    data, err := json.Marshal(user) 
+    //使用json.Marshal序列化User，data数据类型为[]byte
+    CheckError(err)                 
+    //error处理
     return data                     
-    //返回序列化之后的User
+    //返回序列化之后的User
 }
+//将user型的[]byte转化为User
 func JsonTostruct(b []byte) User {
-//相反操作，将[]byte型的数据反序列化后存到User里并返回
     var user User
     err := json.Unmarshal(b, &user)
     CheckError(err)
     return user
 }
+
 
 ```
 
@@ -366,7 +375,7 @@ func NewRedis(db int) *redis.Client { //将数据库连接操作打包为�
 }
 
 ```
-这里数据库地址为pi4，是因为树莓派4B的主机名（参考上文Manjaro-arm的安装）就叫pi4，所以使用pi4这个地址即可。
+这里数据库地址为pi4，是因为树莓派4B的主机名（参考上文Manjaro-arm的安装）叫pi4，所以使用pi4这个地址即可。
 
 ```Golang
 //functool.go
@@ -386,44 +395,42 @@ func TestlinkRedis() ({ //获取单独的一条
 根据TestlinkRedis()方法我们可以得知，获取数据库客户端后可以获得一个 * redis.Client 对象，使用它的Get方法可以获取 "key"对应的"value" 。
 
 ##### 将用户User添加到数据库 0 里面
-建立 SetUser(user User) (User, bool) 方法，可以看出来，使用此方法需要User对象，返回值则是一个 User 和 bool ，
- bool 可以帮我们判断用户是否保存成功。
+建立 SetUser(user User) bool 方法，我们将一个 User 传入，先判断是否存在该用户 ，如果不存在就保存该用户，存在就不保存，使用 booll 可以帮我们判断用户是否保存成功。
 ```Golang
-//functool.go
+//user.go
 
-func SetUser(user User) (User, bool) { //保存User
+//保存该用户到数据库
+func SetUser(user User) bool { //保存User
     //使用getUser进行查询
-    u, msg := GetUser(user)
-    if msg { //如果有此人就直接返回此人，并表示保存用户User失败
-        return u, false
-    } else {//没有此人，链接数据库 0 将用户保存
+    _, b := GetUser(user)
+    if b { //如果有此人就直接返回此人
+        return false
+    } else {
         rdb := NewRedis(0)                                          //连接数据库0
         err := rdb.Set(ctx, user.Name, StructTojson(user), 0).Err() //保存用户
         CheckError(err)
         rdb.Close()
-        return user, true//依然返回用户，这样就不必再获取一遍了，返回true表示保存成功
+        return true
     }
 }
-
 ```
 其中可以看到先使用了一个 GetUser() 方法来判断该用户是否存在过，目的是避免同一用户多次存储，造成新用户挤掉老用户的问题
 其中还使用到上文所说的 StructTojson(User) 方法。
 ##### 从数据库 0 获取User
 建立 GetUser(user User) (User, bool) 方法，可以看出，使用此方法需要一个 User 对象，因为我们使用 User.Name 作为唯一识别码，所以这里只需要 User.Name 带值即可。
 ```Golang
-//functool.go
+//user.go
 
-func GetUser(user User) (User, bool) { //获取用户全部的信息，这里使用User.Name作为唯一识别号
+//查询该用户，并返回相应数据
+func GetUser(user User) (User, bool) { //获取用户全部的信息，这里使用user.Name作为唯一识别号
     rdb := NewRedis(0)                           //连接数据库
     val, err := rdb.Get(ctx, user.Name).Result() //使用user.Name来进行查找
     rdb.Close()
     if nil == err {
         return JsonTostruct([]byte(val)), true //如果有此用户，则返回User，true
     }
-    
-    return User{"nil", "nil", false}, false //如果没有此用户，则返回nil，false
+    return User{"nil", "nil", "nil"}, false //如果没有此用户，则返回nil，false
 }
-
 ```
 在上述代码中，从数据库 0 中获取回来的值 val 是一个 string 类型的数据，需要先转化为[]byte类型，再使用 JsonTostruct([]byte) 方法进行反序列化。
 GetUser() 方法会返回 User，bool ，可以从bool的值来判断用户获取是否成功。
@@ -438,11 +445,11 @@ func TestsaveUser() { 
         Passwd: "123412sdd",
         Status: true,
     }
-    uu, msg := SetUser(user)
-    if msg {
-        fmt.Println("oh yeah we saved this user!", uu)
+    b := SetUser(user)
+    if b {
+        fmt.Println("oh yeah we saved this user!")
     } else {
-        fmt.Println("opps! we alredy have this user!dont save agn!", uu)
+        fmt.Println("opps! we alredy have this user!dont save agn!")
     }
     return
 }
@@ -460,43 +467,35 @@ func TestgetUser() {
     return
 }
 
-func DeletSomething(key string, Db int) {//该方法可以删除Redis里任意数据库 Db 的任意 Key
+//该方法可以删除Redis里任意数据库 Db 的任意 Key
+func DeletSomething(key string, Db int) {
     rdb := NewRedis(Db)
     rdb.Del(ctx, key).Err()
     rdb.Close()
 }
-
-
-
 ```
 ###### 运行 TestsaveUser() 方法
 
 ```Golang
-//server.go
-
 func main() {
     TestsaveUser()
 }
-
 ```
 得到保存成功的信息。
 ```Bash
 go run server.go functool.go
-oh yeah we saved this user! {bill 123412sdd true}
+oh yeah we saved this user!
 ```
 如再次运行该方法则会得到 我们已经有这个数据了，不要再来保存的提示。
 ```Bash
 go run server.go functool.go
-opps! we alredy have this user!dont save agn! {bill 123412sdd true}
+opps! we alredy have this user!dont save agn！
 ```
 ###### 运行 TestgetUser() 方法
 ```Golang
-//server.go
-
 func main() {
     TestgetUser()
 }
-
 ```
 可以获取到该用户的全部信息。
 ```Bash
@@ -505,12 +504,10 @@ yeah ~~ we have this user : {bill 123412sdd true}
 ```
 ###### 运行DeletSomething()
 ```Golang
-//server.go
-
+//functool.go
 func main() {
     DeletSomething("bill",0)
 }
-
 ```
 没有返回信息，根据  rdb.Del(ctx, key).Err() 方法，在没有出错的情况下是不会有返回值的。
 ```Bash
@@ -530,57 +527,41 @@ opps we dont have this user!
 #### Message 管理
 ##### 序列化 Message
 ```Golang
-//functool.go
-
-func MarshaleMessage(u User, m Message) Message {
- timeUnixNano := time.Now().UnixNano()//获取保存 Message 时的时间，使用纳秒表示
-    data, _ := json.Marshal(timeUnixNano)//序列化
-    msg := Message{
-        m.Name,
-        string(data),//因Redis数据库的原因，时间将保存为string型
-        m.Msge,
-    }
-    data, err := json.Marshal(msg)
-
+//messaage.go
+data, err := json.Marshal(m)
 ```
-使用 MarshaleMessage() 方法实现对 Message 的序列化，也可以将序列化过程加入到 SetMessage() 方法。
+使用 json.Marshal() 方法实现对 Message 的序列化。
 
 ##### 保存Message到数据库 1
 
 ```Golang
-//functool.go
+//message.go
 
+//保存该message到数据库1
 func SetMessage(m Message) bool {
-    timeUnixNano := time.Now().UnixNano()
-    data, _ := json.Marshal(timeUnixNano)
-    msg := Message{
-        m.Name,
-        string(data),
-        m.Msge,
-    }
-    data, err := json.Marshal(msg) //使用json.Marshal序列化，data数据类型为[]byte
+    data, err := json.Marshal(m) //使用json.Marshal序列化，data数据类型为[]byte
     if nil == err {
         rdb := NewRedis(1)
-        rdb.Set(ctx, msg.IdTime, data, 24*time.Hour).Err() //保存Message,保存24小时24*time.Hour
+        rdb.Set(ctx, m.IdTime, data, 24*time.Hour).Err() //保存Message,保存24小时24*time.Hour
         rdb.Close()
         return true //返回true表示存储成功
     } else {
         return false //返回false表示存储失败
     }
 }
-
 ```
-使用 SetMessage() 方法实现 Message 的存储，这里将序列化过程加入到 SetMessage() 方法里面。
-其中 rdb.Set(ctx, msg.Id, data, 24 * time.Hour).Err() 这里的 24 * time.Hour 用来控制 Message 存在时间，服务端 Message 存储时限设置为24小时，过期自动删除，在后面的测试中应使用更短的时间比如 10 * time.Second 超过10秒后自动删除。
+使用 SetMessage() 方法实现 Message 的存储。
+其中 rdb.Set(ctx, msg.Id, data, 24 * time.Hour).Err() 这里的 24 * time.Hour 用来控制 Message 存在时间，服务端 Message 存储时限设置为24小时，过期自动删除，在后面的测试中应使用更短的时间例如 10 * time.Second 超过10秒后自动删除。
 
 ##### 从数据库 1 中获取 Message
 ```Golang
 //functool.go
 
-func GetMessage(m Message) (Message, bool) { //获取单独的一条
-    rdb := NewRedis(1)                      //获取redis客户端
-    val, err := rdb.Get(ctx, m.Id).Result() //使用name获取Message
-    rdb.Close()                             //关闭redis客户端
+//使用IdTime进行message查询
+func GetMessage(idtime string) (Message, bool) { //获取单独的一条
+    rdb := NewRedis(1)                        //获取redis客户端
+    val, err := rdb.Get(ctx, idtime).Result() //使用IdTime获取Message
+    rdb.Close()                               //关闭redis客户端
     if nil == err {
         var msg Message
         err := json.Unmarshal([]byte(val), &msg) //反序列化
@@ -589,37 +570,42 @@ func GetMessage(m Message) (Message, bool) { //获取单独的一条
         //在无err情况下返回Message，并设置状态为true
         //true表示获取成功
     } else {
-        return Message{"", ""}, false
+        return Message{"", "", ""}, false
         //在err情况下返回空的Message，并设置状态为false
         //false表示获取失败
     }
 }
-
 ```
 这个是获取单个 Message 的测试，在实际应用中， 服务端收到来自客户端的 Message 后将会把这条 Message 群发给所有在线的用户，随即保存到 Redis 1 里。
 这里有一个用户场景，例如用户 bill 不在线，所以 bill 的状态是不在线，当 bill 重新上线后，需要历史消息，就会向客户端发起请求，这里就会用到 GetAllMessageRange() ，将所有的历史消息打包给用户 bill 。
 ```Golang
 //functool.go
 
+//获取该数据库里所有的key
 func GetAllKeys(db int) []string {
     rdb := NewRedis(db)
     defer rdb.Close()
-    keys, err := rdb.Keys(ctx, "*").Result()//获取所有Message的key，keys是一个string类型的集合
+    keys, err := rdb.Keys(ctx, "*").Result()
     CheckError(err)
     return keys
 }
 
-//也可使用下列代码，下列主要是使用range来遍历 Message ，使用起来很简单
-func GetAllMessageRange() map[int]Message {
-    msmp := make(map[int]Message)//建立Message的集合
+//message.go
+
+
+//获取全部的消息,将其打包为map
+func GetAllMessageRange() []Message {
+    var MessageSlice []Message
     b := GetAllKeys(1)
-    for i, idtime := range b {//遍历 Keys 进行查询
+    for _, idtime := range b {
         m, _ := GetMessage(idtime)
-        msmp[i] = m
+        MessageSlice = append(MessageSlice, m)
     }
-    return BubbleSortPro(msmp)//调用冒泡排序进行Message集合的排序
+    return BubbleSortPro(MessageSlice)
 }
-func BubbleSortPro(arr map[int]Message) map[int]Message {//使用冒泡排序将Message进行排序
+
+//对Message进行冒泡排序,使其按照IdTime的先后顺序
+func BubbleSortPro(arr []Message) []Message {
     length := len(arr)
     for i := 0; i < length; i++ {
         over := false
@@ -629,17 +615,14 @@ func BubbleSortPro(arr map[int]Message) map[int]Message {//使用冒泡排�
                 arr[j], arr[j+1] = arr[j+1], arr[j]
             }
         }
-        if over == false {
+        if !over {
             break
         }
     }
     return arr
 }
-
-
-
 ```
-以上代码中我们使用到了冒泡排序，这主要是因为 Redis 是无序数据库，所以需要特别的进行顺序排列，按时间戳将对应的 Message 设置到对应的 map ID 。有利于后期的 Message 遍历。
+以上代码中我们使用到了冒泡排序，这主要是因为 Redis 是无序数据库，所以需要特别的进行顺序排列，按时间戳 IdTime 进行排序 。有利于后期的 Message 遍历。
 ##### 删除
 在上文中我们提到了， Message 在Redis数据库里超过24小时，将会自动删除，所以这里并不特别需要删除 Message 。
 如需删除指定 Message 可以使用上文【用户管理】中提到的 DeletSomething(key string, Db int) 进行删除。
@@ -647,7 +630,7 @@ func BubbleSortPro(arr map[int]Message) map[int]Message {//使用冒泡排�
 ##### 测试
 
 ```Golang
-//Server.go
+//main.go
 
 
 func main() {
@@ -666,11 +649,13 @@ func testSetMssage() {
         user := User{
             "bill" + s,
             "",
-            true,
+            "",
         }
+        
+        t :=time.Now().UnixNano()
         msg := Message{
             user.Name,
-            "",
+            string(t),
             "message " + s,
         }
         SetMessage(msg)
@@ -697,11 +682,4 @@ ID: 6 时间： 2021-04-23 13:48:55 +0800 CST 名字 bill6 Message： message 6
 ```
 其中我们可以看见， map 里的数据是没有顺序的，因为 Redis 数据库是一个无序数据库，所以打印出来不是顺序排列的，但是我们可以简单的通过遍历将数据顺序排列出来。
 在线用户收到消息必然是顺序排列的，因 Message 收到时先群发给所有在线用户，再使用 SetMessage() ，这个事件是有时间顺序的。
-新上线用户，会收到历史 Message ，也就是以上的 map，收到后进行遍历。
-### 第二节 前端的设计与搭建
-
-#### 项目文件结构
-
-
-#### 建立连接
-
+新上线用户，会收到历史 Message ，也就是使用上文说的冒泡排序，客户端收到后进行遍历，这样的顺序就是正常的了。
