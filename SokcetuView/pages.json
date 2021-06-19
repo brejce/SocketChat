@@ -1,0 +1,66 @@
+{
+	"easycom": {
+		"^u-(.*)": "@/uview-ui/components/u-$1/u-$1.vue"
+	},
+	"pages": [ //pages数组中第一项表示应用启动页，参考：https://uniapp.dcloud.io/collocation/pages
+		{
+			"path": "pages/login/login",
+			"style": {
+				"navigationBarTitleText": "Login"
+			}
+		}
+		,{
+		    "path" : "pages/register/register",
+		    "style" :                                                                                    
+		    {
+		        "navigationBarTitleText": "Register",
+		        "enablePullDownRefresh": false
+		    }
+		    
+		}
+		,{
+		    "path" : "pages/setting/setting",
+		    "style" :                                                                                    
+		    {
+		        "navigationBarTitleText": "Setting",
+		        "enablePullDownRefresh": false
+		    }
+		    
+		}
+		,{
+		    "path" : "pages/message/message",
+		    "style" :                                                                                    
+		    {
+				"navigationStyle":"custom",
+		        "navigationBarTitleText": "Message",
+		        "enablePullDownRefresh": false
+		    }
+		    
+		}
+		,{
+		    "path" : "pages/log/log",
+		    "style" :                                                                                    
+		    {	
+				
+		        "navigationBarTitleText": "日志",
+		        "enablePullDownRefresh": false
+		    }
+		    
+		}
+		,{
+		    "path" : "pages/Changeasswordp/Changeasswordp",
+		    "style" :                                                                                    
+		    {
+		        "navigationBarTitleText": "修改密码",
+		        "enablePullDownRefresh": false
+		    }
+		    
+		}
+	],
+	"globalStyle": {
+		"navigationBarTextStyle": "black",
+		"navigationBarTitleText": "uView",
+		"navigationBarBackgroundColor": "#F8F8F8",
+		"backgroundColor": "#F8F8F8"
+	}
+}
