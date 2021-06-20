@@ -22,6 +22,7 @@ type User struct {
 	Status string `json:"status"`
 }
 
+//已登录用户
 var UserMap = make(map[int]User)
 
 // var MessageSlice []Message
