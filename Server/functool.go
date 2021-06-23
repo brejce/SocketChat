@@ -32,9 +32,9 @@ var ctx = context.Background()
 //将数据库打包
 func NewRedis(db int) *redis.Client { //将数据库连接操作打包为方法使用newRdis(0)方法带入数据库名调用即可
 	rdb := redis.NewClient(&redis.Options{
-		Addr:     "localhost:6379", //数据库默认安装在开发机，监听localhost，默认端口为6379
-		Password: "password",       // no password set
-		DB:       db,               // use default DB
+		Addr:     "47.109.26.249:6379", //数据库默认安装在开发机，监听localhost，默认端口为6379
+		Password: "169809",             // no password set
+		DB:       db,                   // use default DB
 	})
 	return rdb //返回数据库客户端
 }
