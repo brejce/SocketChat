@@ -9,3 +9,4 @@ go run /server
 使用 hbuilderx 导入 SocketuView 
 修改 app.vue内服务器地址
 运行到手机(h5端暂不支持)
+![Alt text](https://github.com/brejce/SocketChat/blob/main/ScreenShots/登录界面.jpg)
