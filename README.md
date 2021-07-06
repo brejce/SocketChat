@@ -9,4 +9,4 @@ go run /server
 使用 hbuilderx 导入 SocketuView   
 修改 app.vue内服务器地址  
 运行到手机(h5端暂不支持)  
-## 运行结果可以查看截图文件夹
+## 示例运行结果可以查看截图文件夹
